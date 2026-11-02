@@ -129,8 +129,6 @@ function bindUI() {
   });
 
   $("#add-tunnel").addEventListener("click", () => openTunnelDialog(null));
-  const emptyAddBtn = $("#empty-add-btn");
-  if (emptyAddBtn) emptyAddBtn.addEventListener("click", () => openTunnelDialog(null));
   $("#tunnel-filter").addEventListener("input", (event) => {
     app.filter = event.target.value;
     renderFleet();
@@ -437,18 +435,15 @@ function renderFleet() {
   const emptyWrap = $("#fleet-empty");
   const emptyTitle = $("#empty-title");
   const emptyDesc = $("#empty-desc");
-  const emptyAdd = $("#empty-add-btn");
 
   if (tunnels.length === 0) {
     emptyWrap.hidden = false;
     if (totalCount === 0) {
       emptyTitle.textContent = "No tunnels configured";
       emptyDesc.textContent = "Add an L2TP/IPsec, SSTP, or PPTP tunnel definition to begin routing outbound traffic.";
-      if (emptyAdd) emptyAdd.hidden = false;
     } else {
       emptyTitle.textContent = "No matching tunnels";
       emptyDesc.textContent = `No tunnels match “${query}”. Clear the search filter to view all tunnels.`;
-      if (emptyAdd) emptyAdd.hidden = true;
     }
   } else {
     emptyWrap.hidden = true;
