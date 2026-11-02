@@ -159,78 +159,76 @@ secrets:
 
 ---
 
----
+## Quick Start
 
-## Quick Start (Panduan Mudah untuk Pemula)
+Follow these simple steps to install and launch the dashboard in under two minutes:
 
-Bagi Anda yang baru pertama kali menggunakan `tunneld`, ikuti langkah sederhana berikut untuk memasang dan menjalankan dashboard dalam 2 menit:
+### Step 1: Download & Run the Automated Installer
 
-### Langkah 1: Download & Jalankan Installer Otomatis
-
-Buka terminal Linux Anda (Debian 12 atau Ubuntu) sebagai `root`:
+Open your Linux terminal (Debian 12 or Ubuntu) as `root`:
 
 ```bash
-# Clone repository
+# Clone the repository
 git clone https://github.com/x-inu/tunneld.git /opt/tunneld
 cd /opt/tunneld
 
-# Jalankan installer otomatis (mengurus dependensi & konfigurasi awal)
+# Run the automated installer (handles packages, binary, and configs)
 sudo ./deploy/install.sh
 ```
 
-Installer otomatis akan menginstal paket dependensi (`xl2tpd`, `sstpc`, `pptp-linux`, `strongswan`), memasang binary ke `/usr/local/bin/tunneld`, menyiapkan konfigurasi bawaan di `/etc/tunneld/`, dan mendaftarkan service systemd.
+The installer installs system package dependencies (`xl2tpd`, `sstpc`, `pptp-linux`, `strongswan`), installs the compiled binary to `/usr/local/bin/tunneld`, prepares configuration files in `/etc/tunneld/`, and registers the systemd unit.
 
-### Langkah 2: Aktifkan Service tunneld
+### Step 2: Enable & Start the Service
 
 ```bash
 sudo systemctl enable --now tunneld.service
 ```
 
-Cek statusnya untuk memastikan sudah berjalan:
+Verify that the service is running:
 ```bash
 sudo systemctl status tunneld.service
 ```
 
-### Langkah 3: Buka Web Dashboard
+### Step 3: Access the Web Dashboard
 
-Secara default, dashboard berjalan aman di port **`8095`** localhost (`127.0.0.1:8095`).
+By default, the dashboard binds safely to port **`8095`** on localhost (`127.0.0.1:8095`).
 
-- **Jika mengakses dari Laptop / Komputer Lokal via SSH**:
-  Jalankan perintah ini di terminal laptop Anda:
+- **When accessing from your local laptop / PC via SSH port forwarding**:
+  Run this command on your local machine:
   ```bash
-  ssh -L 8095:127.0.0.1:8095 root@IP_SERVER_ANDA -p PORT_SSH
+  ssh -L 8095:127.0.0.1:8095 root@YOUR_SERVER_IP -p SSH_PORT
   ```
-  Lalu buka browser Anda ke: 👉 **`http://localhost:8095`**
+  Then open your web browser to: **`http://localhost:8095`**
 
-- **Jika ingin membuka langsung ke IP Server (LAN / Public)**:
-  Buka file `/etc/tunneld/tunneld.yaml`, ubah:
+- **When exposing directly to the server IP (LAN / Public)**:
+  Edit `/etc/tunneld/tunneld.yaml` and set:
   ```yaml
   listen: 0.0.0.0:8095
   allow_remote_bind: true
   ```
-  Lalu restart: `sudo systemctl restart tunneld.service` dan buka `http://IP_SERVER_ANDA:8095`.
+  Restart the daemon: `sudo systemctl restart tunneld.service` and open `http://YOUR_SERVER_IP:8095`.
 
-### Langkah 4: Login
+### Step 4: Sign In
 
 - **Username**: `admin`
-- **Password bawaan**: `ChangeMe`
+- **Default Password**: `ChangeMe`
 
-*(Untuk mengganti password Anda sendiri, jalankan `/usr/local/bin/tunneld hash-password`, copy hash yang muncul, dan tempelkan pada `admin.password_hash` di `/etc/tunneld/tunneld.yaml`).*
+*(To generate your own password hash, run `/usr/local/bin/tunneld hash-password`, copy the generated hash, and paste it into `admin.password_hash` in `/etc/tunneld/tunneld.yaml`).*
 
-### Langkah 5: Tambahkan Tunnel Pertama Anda via Web UI
+### Step 5: Add Your First Tunnel via the Web UI
 
-Anda **tidak perlu mengedit file teks yang rumit**:
-1. Di halaman dashboard, klik tombol **`+ Add tunnel`** di pojok kanan bagian *Tunnel inventory*.
-2. Masukkan nama tunnel, pilih protokol (**L2TP**, **SSTP**, atau **PPTP**), masukkan alamat server VPN (MikroTik) Anda, username, dan password.
-3. Klik **Save tunnel**.
-4. Di kartu tunnel yang baru dibuat, klik tombol **`Use route`** untuk mengaktifkan koneksi dan membelokkan internet keluar melalui IP VPN tersebut.
+You do not need to edit complex configuration files manually:
+1. In the dashboard, click the **`+ Add tunnel`** button in the top-right of the *Tunnel inventory* section.
+2. Enter a tunnel name, select the protocol (**L2TP**, **SSTP**, or **PPTP**), and enter your remote VPN server address (MikroTik), username, and password.
+3. Click **Save tunnel**.
+4. On the newly created tunnel card, click **`Use route`** to connect and route outbound traffic through that VPN exit.
 
-> **Catatan untuk Pengguna Proxmox / LXC**: Jika Anda menjalankan `tunneld` di dalam container LXC (bukan VM), pastikan passthrough `/dev/ppp` telah diaktifkan di konfigurasi host Proxmox (`/etc/pve/lxc/<ID>.conf`):
+> **Note for Proxmox / LXC Users**: If running `tunneld` inside an unprivileged LXC container (not a full VM), ensure `/dev/ppp` passthrough is enabled in your Proxmox host container configuration (`/etc/pve/lxc/<ID>.conf`):
 > ```text
 > lxc.cgroup2.devices.allow: c 108:0 rwm
 > lxc.mount.entry: /dev/ppp dev/ppp none bind,create=file 0 0
 > ```
-> Jika menggunakan VM biasa (KVM), Anda tidak perlu melakukan apa-apa karena kernel driver sudah otomatis aktif.
+> If running inside a standard KVM Virtual Machine or bare-metal host, no host configuration is needed as kernel PPP drivers are available natively.
 
 ---
 
