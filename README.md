@@ -213,7 +213,7 @@ Secara default, dashboard berjalan aman di port **`8095`** localhost (`127.0.0.1
 ### Langkah 4: Login
 
 - **Username**: `admin`
-- **Password bawaan**: `ChangeMe-2026!Tunneld`
+- **Password bawaan**: `ChangeMe`
 
 *(Untuk mengganti password Anda sendiri, jalankan `/usr/local/bin/tunneld hash-password`, copy hash yang muncul, dan tempelkan pada `admin.password_hash` di `/etc/tunneld/tunneld.yaml`).*
 

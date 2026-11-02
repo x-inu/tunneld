@@ -30,8 +30,8 @@ swanctl_dir: /etc/swanctl/conf.d
 admin:
   username: admin
   # Generate your own hash using: tunneld hash-password
-  # Example hash below corresponds to password: "ChangeMe-2026!Tunneld"
-  password_hash: "$2a$12$FR5UNfXfzcdHEzVY/g/X0u5TXQnP5rybwtTMZWYbJV/.J8A3qwwTG"
+  # Example hash below corresponds to password: "ChangeMe"
+  password_hash: "$2a$12$t4VaGjXfI1Rsf7btMKcLPed7Xrc6N2Leley6U7rKBMRcmrYwIVbcW"
 
 # Session settings.
 session:

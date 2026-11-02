@@ -47,8 +47,8 @@ func NewAuth(cfg *config.Config) *Auth {
 
 // HashPassword produces a bcrypt hash for the config file.
 func HashPassword(password string) (string, error) {
-	if len(password) < 12 {
-		return "", fmt.Errorf("password must be at least 12 characters")
+	if len(password) < 8 {
+		return "", fmt.Errorf("password must be at least 8 characters")
 	}
 	h, err := bcrypt.GenerateFromPassword([]byte(password), 12)
 	return string(h), err
