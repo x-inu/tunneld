@@ -129,6 +129,8 @@ function bindUI() {
   });
 
   $("#add-tunnel").addEventListener("click", () => openTunnelDialog(null));
+  const emptyAddBtn = $("#empty-add-btn");
+  if (emptyAddBtn) emptyAddBtn.addEventListener("click", () => openTunnelDialog(null));
   $("#tunnel-filter").addEventListener("input", (event) => {
     app.filter = event.target.value;
     renderFleet();
@@ -207,12 +209,18 @@ function setLive(mode) {
 }
 
 function applyState(state) {
-  if (!state || !Array.isArray(state.tunnels)) return;
+  if (!state) return;
+  if (!Array.isArray(state.tunnels)) {
+    state.tunnels = [];
+  }
   app.state = state;
   app.lastStateAt = Date.now();
   if (state.demo) {
     $("#demo-banner").hidden = false;
     $("#footer-demo").hidden = false;
+  } else {
+    $("#demo-banner").hidden = true;
+    $("#footer-demo").hidden = true;
   }
   renderHero();
   renderStats();
@@ -414,6 +422,7 @@ function renderFleet() {
   }
   app.fleetDirty = false;
 
+  const totalCount = state.tunnels.length;
   const query = app.filter.trim().toLowerCase();
   const tunnels = state.tunnels.filter((tunnel) => {
     if (!query) return true;
@@ -425,7 +434,26 @@ function renderFleet() {
     );
   });
 
-  $("#fleet-empty").hidden = tunnels.length !== 0;
+  const emptyWrap = $("#fleet-empty");
+  const emptyTitle = $("#empty-title");
+  const emptyDesc = $("#empty-desc");
+  const emptyAdd = $("#empty-add-btn");
+
+  if (tunnels.length === 0) {
+    emptyWrap.hidden = false;
+    if (totalCount === 0) {
+      emptyTitle.textContent = "No tunnels configured";
+      emptyDesc.textContent = "Add an L2TP/IPsec, SSTP, or PPTP tunnel definition to begin routing outbound traffic.";
+      if (emptyAdd) emptyAdd.hidden = false;
+    } else {
+      emptyTitle.textContent = "No matching tunnels";
+      emptyDesc.textContent = `No tunnels match “${query}”. Clear the search filter to view all tunnels.`;
+      if (emptyAdd) emptyAdd.hidden = true;
+    }
+  } else {
+    emptyWrap.hidden = true;
+  }
+
   grid.innerHTML = tunnels.map(tunnelCard).join("");
 }
 

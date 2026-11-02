@@ -43,7 +43,7 @@ func NormalizeTunnel(t *Tunnel) {
 // ValidateTunnels validates the whole list, including duplicate names.
 func ValidateTunnels(tunnels []Tunnel) error {
 	if len(tunnels) == 0 {
-		return errors.New("at least one tunnel must be configured")
+		return nil
 	}
 	if len(tunnels) > 200 {
 		return errors.New("a maximum of 200 tunnels is supported")

@@ -155,12 +155,6 @@ func (m *Manager) DeleteTunnel(ctx context.Context, name string) error {
 	if !ok {
 		return fmt.Errorf("tunnel %q is not configured", name)
 	}
-	m.mu.RLock()
-	count := len(m.order)
-	m.mu.RUnlock()
-	if count <= 1 {
-		return errors.New("cannot delete the last tunnel; add another tunnel first")
-	}
 	if err := m.disconnectLocked(ctx, name); err != nil {
 		return fmt.Errorf("refusing to delete: %w", err)
 	}

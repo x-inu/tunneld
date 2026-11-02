@@ -1286,12 +1286,50 @@ select.input {
 }
 
 .empty-state {
-  padding: 54px 24px;
+  padding: 56px 24px;
   border: 1px dashed var(--line-strong);
-  border-radius: 15px;
+  border-radius: 16px;
   text-align: center;
+  background: rgba(17, 16, 14, 0.4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.empty-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgba(205, 196, 186, 0.04);
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-dim);
+  margin-bottom: 4px;
+}
+
+.empty-title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.empty-desc {
+  margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12.5px;
+  max-width: 420px;
+  line-height: 1.5;
+}
+
+.empty-state .btn {
+  margin-top: 8px;
 }
 
 /* Activity */

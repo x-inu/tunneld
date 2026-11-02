@@ -179,7 +179,17 @@
       </div>
       <div class="tunnel-grid" id="tunnel-grid" aria-live="polite"></div>
       <div class="empty-state" id="fleet-empty" hidden>
-        <p>No tunnels match this filter.</p>
+        <div class="empty-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.3">
+            <rect x="3" y="5" width="18" height="14" rx="3"/>
+            <path d="M7 12h2m3 0h5m-10-3h1m3 0h6m-10 6h3m3 0h4" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h3 class="empty-title" id="empty-title">No tunnels configured</h3>
+        <p class="empty-desc" id="empty-desc">Add an L2TP/IPsec, SSTP, or PPTP tunnel definition to begin routing outbound traffic.</p>
+        <button class="btn btn-primary btn-small" id="empty-add-btn" type="button">
+          <span aria-hidden="true">+</span> Add your first tunnel
+        </button>
       </div>
     </section>
 

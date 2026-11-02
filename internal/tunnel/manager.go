@@ -222,6 +222,7 @@ func (m *Manager) Snapshot() Snapshot {
 		DirectIP:         m.directIP,
 		PreviousPublicIP: m.previousIP,
 		UptimeSeconds:    int64(now.Sub(m.started).Seconds()),
+		Tunnels:          []TunnelView{},
 	}
 	if !m.directCheck.IsZero() {
 		t := m.directCheck
