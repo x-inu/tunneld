@@ -115,6 +115,8 @@ type Snapshot struct {
 	ActiveMethod     string       `json:"active_method"`
 	ActiveServer     string       `json:"active_server"`
 	PublicIP         string       `json:"public_ip"`
+	DirectIP         string       `json:"direct_ip,omitempty"`
+	DirectCheck      *time.Time   `json:"direct_check,omitempty"`
 	PreviousPublicIP string       `json:"previous_public_ip"`
 	LastRotationAt   *time.Time   `json:"last_rotation_at"`
 	Rotation         RotationView `json:"rotation"`

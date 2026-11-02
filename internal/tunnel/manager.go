@@ -55,6 +55,8 @@ type Manager struct {
 	order        []string
 	active       string
 	currentIP    string
+	directIP     string
+	directCheck  time.Time
 	previousIP   string
 	lastRotation time.Time
 	lastReason   string
@@ -179,6 +181,7 @@ func (m *Manager) Start(parent context.Context) error {
 	go m.healthLoop()
 	go m.timerLoop()
 	go m.restoreLoop()
+	go m.refreshDirectIP(ctx)
 	m.log.Info("", "tunneld %s started in %s mode with %d tunnel definitions", m.version, m.rotationMode, len(m.order))
 	return nil
 }
@@ -216,8 +219,16 @@ func (m *Manager) Snapshot() Snapshot {
 		Demo:             m.demo,
 		Active:           m.active,
 		PublicIP:         m.currentIP,
+		DirectIP:         m.directIP,
 		PreviousPublicIP: m.previousIP,
 		UptimeSeconds:    int64(now.Sub(m.started).Seconds()),
+	}
+	if !m.directCheck.IsZero() {
+		t := m.directCheck
+		s.DirectCheck = &t
+	}
+	if m.active == "" && m.directIP != "" {
+		s.PublicIP = m.directIP
 	}
 	if !m.lastRotation.IsZero() {
 		t := m.lastRotation
@@ -486,13 +497,14 @@ func (m *Manager) disconnectLocked(ctx context.Context, name string) error {
 		}
 		m.mu.Lock()
 		m.active = ""
-		m.currentIP = ""
+		m.currentIP = m.directIP
 		m.previousIP = oldIP
 		m.lastActiveWanted = ""
 		m.mu.Unlock()
 		m.persist(settingLastActive, "")
 		m.persist(settingPreviousIP, oldIP)
 		m.log.Warn(name, "active tunnel disconnected; traffic returned to the original uplink")
+		go m.refreshDirectIP(context.Background())
 	}
 	if status == StatusDisconnected && st.link.Iface == "" {
 		_ = m.ops.Cleanup(ctx, name)
@@ -872,7 +884,7 @@ func (m *Manager) Failover(reason string) {
 		}
 		m.mu.Lock()
 		m.active = ""
-		m.currentIP = ""
+		m.currentIP = m.directIP
 		m.previousIP = oldIP
 		m.lastActiveWanted = ""
 		m.mu.Unlock()
@@ -880,6 +892,7 @@ func (m *Manager) Failover(reason string) {
 		m.persist(settingPreviousIP, oldIP)
 		m.recordRotation(context.Background(), active, "", "failover", oldIP, "", false, detail)
 		m.log.Error(active, "%s", detail)
+		go m.refreshDirectIP(context.Background())
 		return
 	}
 	var lastErr error
@@ -922,7 +935,28 @@ func (m *Manager) healthLoop() {
 			return
 		case <-ticker.C:
 			m.runHealthOnce()
+			m.mu.RLock()
+			active := m.active
+			m.mu.RUnlock()
+			if active == "" {
+				go m.refreshDirectIP(m.ctx)
+			}
 		}
+	}
+}
+
+func (m *Manager) refreshDirectIP(ctx context.Context) {
+	c, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	ip, err := m.ops.VerifyDefault(c)
+	if err == nil && ip != "" {
+		m.mu.Lock()
+		m.directIP = ip
+		m.directCheck = time.Now().UTC()
+		if m.active == "" {
+			m.currentIP = ip
+		}
+		m.mu.Unlock()
 	}
 }
 

@@ -31,7 +31,7 @@ admin:
   username: admin
   # Generate your own hash using: tunneld hash-password
   # Example hash below corresponds to password: "ChangeMe-2026!Tunneld"
-  password_hash: "$2a$12$ZqC4jB9jP4U0pQ3d3nZ2ve9vF1Jp5k3x7m8r2w9y4b6v8z1a3c5e."
+  password_hash: "$2a$12$FR5UNfXfzcdHEzVY/g/X0u5TXQnP5rybwtTMZWYbJV/.J8A3qwwTG"
 
 # Session settings.
 session:

@@ -229,7 +229,7 @@ function applyState(state) {
 function renderHero() {
   const state = app.state;
   const active = state.tunnels.find((t) => t.active) || null;
-  const ip = state.public_ip || "";
+  const ip = state.public_ip || state.direct_ip || "";
   const verified = Boolean(active && active.health_ok && ip);
 
   const ipNode = $("#hero-ip");
@@ -246,7 +246,7 @@ function renderHero() {
     pillLabel.textContent = "Verifying route";
   } else {
     pill.dataset.state = "offline";
-    pillLabel.textContent = "Original uplink";
+    pillLabel.textContent = "Direct uplink · No VPN";
   }
 
   const summary = $("#hero-summary");
@@ -254,14 +254,16 @@ function renderHero() {
     summary.innerHTML = `Traffic exits through <strong>${esc(active.server)}</strong> on <strong>${esc(methodLabel(active.method))}</strong>. The public address was confirmed through the active tunnel.`;
   } else if (active) {
     summary.innerHTML = `Traffic is routed through <strong>${esc(active.server)}</strong>, but the exit has not been verified yet.`;
+  } else if (ip) {
+    summary.innerHTML = `No tunnel route is active. All server traffic exits directly through the physical host network (<strong>${esc(ip)}</strong>).`;
   } else {
-    summary.textContent = "No tunnel is carrying traffic. The server is using its original uplink.";
+    summary.textContent = "No tunnel is active. The server is using its direct physical uplink.";
   }
 
-  $("#hero-tunnel").textContent = active ? active.name : "—";
-  $("#hero-method").textContent = active ? methodLabel(active.method) : "—";
-  $("#hero-verified").textContent = active ? relativeTime(active.active_since || active.last_check) : "—";
-  $("#hero-latency").textContent = active && active.latency_ms > 0 ? `${active.latency_ms} ms` : "—";
+  $("#hero-tunnel").textContent = active ? active.name : "Direct host uplink";
+  $("#hero-method").textContent = active ? methodLabel(active.method) : "Direct (None)";
+  $("#hero-verified").textContent = active ? relativeTime(active.active_since || active.last_check) : (state.direct_check ? relativeTime(state.direct_check) : "Physical link");
+  $("#hero-latency").textContent = active && active.latency_ms > 0 ? `${active.latency_ms} ms` : "0 ms (local)";
 
   const copy = $("#copy-ip");
   copy.disabled = !ip;
@@ -286,8 +288,8 @@ function renderHero() {
     proofText.textContent = "The tunnel is connected, but the exit has not passed a consistent public IP check.";
   } else {
     proof.dataset.state = "idle";
-    proofBadge.textContent = "Idle";
-    proofText.textContent = "No tunnel route is active. Traffic exits through the original uplink.";
+    proofBadge.textContent = "Direct exit";
+    proofText.textContent = "No VPN tunnel is active. Outbound network traffic flows directly through the server's default physical gateway.";
   }
 }
 
@@ -815,12 +817,12 @@ async function loadActivity(force) {
   app.activityLoading = true;
   app.activityError = "";
 
-  let path = "/api/history?limit=100";
+  let path = "/api/history?limit=30";
   if (tab === "logs") {
     const tunnel = $("#log-filter").value;
-    path = `/api/logs?limit=200${tunnel ? `&tunnel=${encodeURIComponent(tunnel)}` : ""}`;
+    path = `/api/logs?limit=30${tunnel ? `&tunnel=${encodeURIComponent(tunnel)}` : ""}`;
   } else if (tab === "audit") {
-    path = "/api/audit?limit=100";
+    path = "/api/audit?limit=30";
   }
 
   try {

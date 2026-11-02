@@ -1364,6 +1364,27 @@ select.input {
 
 .table-wrap {
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 420px;
+  overscroll-behavior: contain;
+}
+
+.table-wrap::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.table-wrap::-webkit-scrollbar-track {
+  background: rgba(10, 9, 8, 0.4);
+}
+
+.table-wrap::-webkit-scrollbar-thumb {
+  background: rgba(205, 196, 186, 0.2);
+  border-radius: 3px;
+}
+
+.table-wrap::-webkit-scrollbar-thumb:hover {
+  background: rgba(205, 196, 186, 0.35);
 }
 
 .activity-body {
@@ -1374,6 +1395,14 @@ select.input {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
+}
+
+.data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #141311;
+  box-shadow: 0 1px 0 var(--line);
 }
 
 .data-table th {

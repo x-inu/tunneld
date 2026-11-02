@@ -76,7 +76,7 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request, _ *session)
 }
 
 func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, _ *session) {
-	limit := queryLimit(r, 50, 500)
+	limit := queryLimit(r, 30, 500)
 	rows, err := s.store.ListRotations(r.Context(), limit)
 	if err != nil {
 		s.fail(w, http.StatusInternalServerError, errors.New("could not read rotation history"))
@@ -89,7 +89,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request, _ *sessio
 }
 
 func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request, _ *session) {
-	limit := queryLimit(r, 200, 1000)
+	limit := queryLimit(r, 30, 1000)
 	rows, err := s.store.ListLogs(r.Context(), strings.TrimSpace(r.URL.Query().Get("tunnel")), limit)
 	if err != nil {
 		s.fail(w, http.StatusInternalServerError, errors.New("could not read logs"))
@@ -102,7 +102,7 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request, _ *session) 
 }
 
 func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request, _ *session) {
-	limit := queryLimit(r, 100, 500)
+	limit := queryLimit(r, 30, 500)
 	rows, err := s.store.ListAudit(r.Context(), limit)
 	if err != nil {
 		s.fail(w, http.StatusInternalServerError, errors.New("could not read the audit trail"))
