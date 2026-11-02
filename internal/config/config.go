@@ -1,0 +1,409 @@
+// Package config loads and validates the tunneld application configuration,
+// the tunnel definitions, and the server-side credential store.
+package config
+
+import (
+	"errors"
+	"fmt"
+	"net"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"gopkg.in/yaml.v3"
+)
+
+// Method is a supported tunnel protocol.
+type Method string
+
+const (
+	MethodL2TP Method = "l2tp"
+	MethodSSTP Method = "sstp"
+	MethodPPTP Method = "pptp"
+)
+
+// Config is the main application configuration. It is intentionally separate
+// from tunnels.yaml so that editing tunnels from the dashboard can never drop
+// server, authentication, or command settings.
+type Config struct {
+	Listen          string         `yaml:"listen"`
+	AllowRemoteBind bool           `yaml:"allow_remote_bind"`
+	Database        string         `yaml:"database"`
+	TunnelsFile     string         `yaml:"tunnels_file"`
+	SecretsFile     string         `yaml:"secrets_file"`
+	StateDir        string         `yaml:"state_dir"`
+	SwanctlDir      string         `yaml:"swanctl_dir"`
+	Admin           AdminConfig    `yaml:"admin"`
+	Session         SessionConfig  `yaml:"session"`
+	Health          HealthConfig   `yaml:"health"`
+	Rotation        RotationConfig `yaml:"rotation"`
+	Network         NetworkConfig  `yaml:"network"`
+	CheckerURLs     []string       `yaml:"checker_urls"`
+	Commands        CommandConfig  `yaml:"commands"`
+	IPUpDir         string         `yaml:"ip_up_dir"`
+	IPDownDir       string         `yaml:"ip_down_dir"`
+	TrustProxy      bool           `yaml:"trust_proxy"`
+	Demo            bool           `yaml:"demo"`
+	LogLevel        string         `yaml:"log_level"`
+
+	// dir is the directory holding this configuration file. It is used to
+	// resolve relative paths and is not serialized.
+	dir string
+}
+
+type AdminConfig struct {
+	Username     string `yaml:"username"`
+	PasswordHash string `yaml:"password_hash"`
+}
+
+type SessionConfig struct {
+	CookieName     string `yaml:"cookie_name"`
+	TTLHours       int    `yaml:"ttl_hours"`
+	IdleMinutes    int    `yaml:"idle_minutes"`
+	SecureOverride string `yaml:"secure_override"` // "", "true", "false"; auto by default
+}
+
+type HealthConfig struct {
+	IntervalSeconds  int `yaml:"interval_seconds"`
+	TimeoutSeconds   int `yaml:"timeout_seconds"`
+	PingTimeoutMS    int `yaml:"ping_timeout_ms"`
+	FailThreshold    int `yaml:"fail_threshold"`
+	CooldownSeconds  int `yaml:"cooldown_seconds"`
+	LogRetentionDays int `yaml:"log_retention_days"`
+}
+
+type RotationConfig struct {
+	DefaultMode            string `yaml:"default_mode"`
+	DefaultIntervalMinutes int    `yaml:"default_interval_minutes"`
+	MinIntervalMinutes     int    `yaml:"min_interval_minutes"`
+	MaxIntervalMinutes     int    `yaml:"max_interval_minutes"`
+	VerifyTimeoutSeconds   int    `yaml:"verify_timeout_seconds"`
+	MinHealthy             int    `yaml:"min_healthy"`
+}
+
+type NetworkConfig struct {
+	UplinkInterface  string `yaml:"uplink_interface"`
+	UplinkGateway    string `yaml:"uplink_gateway"`
+	HostRoute        bool   `yaml:"host_route"`
+	RouteTableBase   int    `yaml:"route_table_base"`
+	RulePriorityBase int    `yaml:"rule_priority_base"`
+}
+
+type CommandConfig struct {
+	IP      string `yaml:"ip"`
+	Ping    string `yaml:"ping"`
+	Curl    string `yaml:"curl"`
+	Pppd    string `yaml:"pppd"`
+	Xl2tpd  string `yaml:"xl2tpd"`
+	Sstpc   string `yaml:"sstpc"`
+	Pptp    string `yaml:"pptp"`
+	Swanctl string `yaml:"swanctl"`
+}
+
+// Tunnel is one outbound tunnel definition. It never contains a password or
+// pre-shared key: those live in secrets.yaml behind the *Ref fields.
+type Tunnel struct {
+	Name           string `yaml:"name" json:"name"`
+	Method         Method `yaml:"method" json:"method"`
+	Server         string `yaml:"server" json:"server"`
+	Username       string `yaml:"username" json:"username"`
+	PasswordRef    string `yaml:"password_ref" json:"-"`
+	UseIPSec       bool   `yaml:"use_ipsec,omitempty" json:"use_ipsec"`
+	IPSecSecretRef string `yaml:"ipsec_secret_ref,omitempty" json:"-"`
+	SSTPPort       int    `yaml:"sstp_port,omitempty" json:"sstp_port"`
+	SSTPIgnoreCert bool   `yaml:"sstp_ignore_cert,omitempty" json:"sstp_ignore_cert"`
+	SSTPCACert     string `yaml:"sstp_ca_cert,omitempty" json:"sstp_ca_cert"`
+	PPTPPhone      string `yaml:"pptp_phone,omitempty" json:"pptp_phone"`
+	MTU            int    `yaml:"mtu,omitempty" json:"mtu"`
+	MRU            int    `yaml:"mru,omitempty" json:"mru"`
+	RequireMPPE    bool   `yaml:"require_mppe,omitempty" json:"require_mppe"`
+	Enabled        bool   `yaml:"enabled" json:"enabled"`
+}
+
+// TunnelsFile is the on-disk tunnels.yaml document.
+type TunnelsFile struct {
+	Tunnels []Tunnel `yaml:"tunnels"`
+}
+
+// Default returns the built-in configuration defaults.
+func Default() Config {
+	return Config{
+		Listen:      "127.0.0.1:8095",
+		Database:    "/var/lib/tunneld/tunneld.db",
+		TunnelsFile: "/etc/tunneld/tunnels.yaml",
+		SecretsFile: "/etc/tunneld/secrets.yaml",
+		StateDir:    "/run/tunneld",
+		SwanctlDir:  "/etc/swanctl/conf.d",
+		Admin: AdminConfig{
+			Username: "admin",
+		},
+		Session: SessionConfig{
+			CookieName:  "tunneld_session",
+			TTLHours:    12,
+			IdleMinutes: 120,
+		},
+		Health: HealthConfig{
+			IntervalSeconds:  15,
+			TimeoutSeconds:   8,
+			PingTimeoutMS:    2500,
+			FailThreshold:    3,
+			CooldownSeconds:  120,
+			LogRetentionDays: 30,
+		},
+		Rotation: RotationConfig{
+			DefaultMode:            "manual",
+			DefaultIntervalMinutes: 10,
+			MinIntervalMinutes:     1,
+			MaxIntervalMinutes:     60,
+			VerifyTimeoutSeconds:   20,
+			MinHealthy:             2,
+		},
+		Network: NetworkConfig{
+			HostRoute:        true,
+			RouteTableBase:   200,
+			RulePriorityBase: 10000,
+		},
+		CheckerURLs: []string{
+			"https://api.ipify.org",
+			"https://ifconfig.me/ip",
+			"https://icanhazip.com",
+		},
+		Commands: CommandConfig{
+			IP:      "/usr/sbin/ip",
+			Ping:    "/usr/bin/ping",
+			Curl:    "/usr/bin/curl",
+			Pppd:    "/usr/sbin/pppd",
+			Xl2tpd:  "/usr/sbin/xl2tpd",
+			Sstpc:   "/usr/sbin/sstpc",
+			Pptp:    "/usr/sbin/pptp",
+			Swanctl: "/usr/sbin/swanctl",
+		},
+		IPUpDir:    "/etc/ppp/ip-up.d",
+		IPDownDir:  "/etc/ppp/ip-down.d",
+		TrustProxy: true,
+		LogLevel:   "info",
+	}
+}
+
+// Load reads and strictly validates the application configuration file.
+func Load(path string) (*Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read config: %w", err)
+	}
+	cfg := Default()
+	dec := yaml.NewDecoder(strings.NewReader(string(data)))
+	dec.KnownFields(true)
+	if err := dec.Decode(&cfg); err != nil {
+		return nil, fmt.Errorf("parse config %s: %w", path, err)
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+	cfg.dir = filepath.Dir(abs)
+	cfg.resolvePaths()
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+func (c *Config) resolvePaths() {
+	c.Database = c.resolve(c.Database)
+	c.TunnelsFile = c.resolve(c.TunnelsFile)
+	c.SecretsFile = c.resolve(c.SecretsFile)
+	c.StateDir = c.resolve(c.StateDir)
+	c.SwanctlDir = c.resolve(c.SwanctlDir)
+	c.IPUpDir = c.resolve(c.IPUpDir)
+	c.IPDownDir = c.resolve(c.IPDownDir)
+}
+
+func (c *Config) resolve(p string) string {
+	if p == "" || filepath.IsAbs(p) {
+		return p
+	}
+	return filepath.Join(c.dir, p)
+}
+
+// Validate checks server-level settings.
+func (c *Config) Validate() error {
+	var errs []error
+	if c.Listen == "" {
+		errs = append(errs, errors.New("listen is required"))
+	} else {
+		host, port, err := net.SplitHostPort(c.Listen)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("listen %q must be host:port", c.Listen))
+		} else if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+			errs = append(errs, fmt.Errorf("listen port %q is invalid", port))
+		} else if !c.AllowRemoteBind {
+			ip := net.ParseIP(host)
+			if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+				errs = append(errs, fmt.Errorf("listen %q is not loopback; set allow_remote_bind: true only behind a trusted proxy/firewall", c.Listen))
+			}
+		}
+	}
+	if c.Admin.Username == "" {
+		errs = append(errs, errors.New("admin.username is required"))
+	}
+	for name, p := range map[string]string{
+		"database": c.Database, "tunnels_file": c.TunnelsFile, "secrets_file": c.SecretsFile,
+		"state_dir": c.StateDir, "swanctl_dir": c.SwanctlDir, "ip_up_dir": c.IPUpDir, "ip_down_dir": c.IPDownDir,
+	} {
+		if p == "" || !filepath.IsAbs(p) {
+			errs = append(errs, fmt.Errorf("%s must be an absolute path", name))
+		}
+	}
+	if !strings.HasPrefix(c.Admin.PasswordHash, "$2a$") &&
+		!strings.HasPrefix(c.Admin.PasswordHash, "$2b$") &&
+		!strings.HasPrefix(c.Admin.PasswordHash, "$2y$") {
+		errs = append(errs, errors.New("admin.password_hash must be a bcrypt hash (use: tunneld hash-password)"))
+	}
+	if c.Session.TTLHours < 1 || c.Session.TTLHours > 168 {
+		errs = append(errs, errors.New("session.ttl_hours must be between 1 and 168"))
+	}
+	if c.Session.IdleMinutes < 5 || c.Session.IdleMinutes > 1440 {
+		errs = append(errs, errors.New("session.idle_minutes must be between 5 and 1440"))
+	}
+	switch c.Session.SecureOverride {
+	case "", "true", "false":
+	default:
+		errs = append(errs, errors.New("session.secure_override must be empty, true, or false"))
+	}
+	if c.Health.IntervalSeconds < 3 || c.Health.IntervalSeconds > 300 {
+		errs = append(errs, errors.New("health.interval_seconds must be between 3 and 300"))
+	}
+	if c.Health.TimeoutSeconds < 2 || c.Health.TimeoutSeconds > 60 {
+		errs = append(errs, errors.New("health.timeout_seconds must be between 2 and 60"))
+	}
+	if c.Health.FailThreshold < 1 || c.Health.FailThreshold > 20 {
+		errs = append(errs, errors.New("health.fail_threshold must be between 1 and 20"))
+	}
+	if c.Health.CooldownSeconds < 10 || c.Health.CooldownSeconds > 3600 {
+		errs = append(errs, errors.New("health.cooldown_seconds must be between 10 and 3600"))
+	}
+	if c.Rotation.DefaultMode != "manual" && c.Rotation.DefaultMode != "timer" && c.Rotation.DefaultMode != "failover" {
+		errs = append(errs, errors.New("rotation.default_mode must be manual, timer, or failover"))
+	}
+	if c.Rotation.MinIntervalMinutes < 1 || c.Rotation.MaxIntervalMinutes > 1440 ||
+		c.Rotation.MinIntervalMinutes > c.Rotation.MaxIntervalMinutes {
+		errs = append(errs, errors.New("rotation interval bounds are invalid"))
+	}
+	if c.Rotation.DefaultIntervalMinutes < c.Rotation.MinIntervalMinutes ||
+		c.Rotation.DefaultIntervalMinutes > c.Rotation.MaxIntervalMinutes {
+		errs = append(errs, errors.New("rotation.default_interval_minutes is outside the configured bounds"))
+	}
+	if c.Rotation.MinHealthy < 1 {
+		errs = append(errs, errors.New("rotation.min_healthy must be at least 1"))
+	}
+	if c.Rotation.VerifyTimeoutSeconds < 5 || c.Rotation.VerifyTimeoutSeconds > 120 {
+		errs = append(errs, errors.New("rotation.verify_timeout_seconds must be between 5 and 120"))
+	}
+	if c.Network.HostRoute && c.Network.UplinkGateway != "" && net.ParseIP(c.Network.UplinkGateway) == nil {
+		errs = append(errs, errors.New("network.uplink_gateway must be an IP address"))
+	}
+	if c.Network.RouteTableBase < 1 || c.Network.RouteTableBase > 65000 {
+		errs = append(errs, errors.New("network.route_table_base is invalid"))
+	}
+	if len(c.CheckerURLs) == 0 {
+		errs = append(errs, errors.New("checker_urls must contain at least one URL"))
+	}
+	for _, raw := range c.CheckerURLs {
+		u, err := url.Parse(raw)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			errs = append(errs, fmt.Errorf("checker URL %q is invalid", raw))
+		}
+	}
+	for name, p := range map[string]string{
+		"ip": c.Commands.IP, "ping": c.Commands.Ping, "curl": c.Commands.Curl,
+		"pppd": c.Commands.Pppd, "xl2tpd": c.Commands.Xl2tpd,
+		"sstpc": c.Commands.Sstpc, "pptp": c.Commands.Pptp, "swanctl": c.Commands.Swanctl,
+	} {
+		if p == "" || !filepath.IsAbs(p) {
+			errs = append(errs, fmt.Errorf("commands.%s must be an absolute path", name))
+		}
+	}
+	if c.LogLevel != "debug" && c.LogLevel != "info" && c.LogLevel != "warn" && c.LogLevel != "error" {
+		errs = append(errs, errors.New("log_level must be debug, info, warn, or error"))
+	}
+	return errors.Join(errs...)
+}
+
+// LoadTunnels reads and validates tunnels.yaml.
+func LoadTunnels(path string) ([]Tunnel, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read tunnels file: %w", err)
+	}
+	var doc TunnelsFile
+	dec := yaml.NewDecoder(strings.NewReader(string(data)))
+	dec.KnownFields(true)
+	if err := dec.Decode(&doc); err != nil {
+		return nil, fmt.Errorf("parse tunnels file %s: %w", path, err)
+	}
+	if err := ValidateTunnels(doc.Tunnels); err != nil {
+		return nil, err
+	}
+	return doc.Tunnels, nil
+}
+
+// SaveTunnels atomically writes tunnels.yaml with mode 0600.
+func SaveTunnels(path string, tunnels []Tunnel) error {
+	if err := ValidateTunnels(tunnels); err != nil {
+		return err
+	}
+	out, err := yaml.Marshal(TunnelsFile{Tunnels: tunnels})
+	if err != nil {
+		return err
+	}
+	header := []byte("# Managed by tunneld. Manual edits are allowed; restart tunneld to reload.\n" +
+		"# Credentials are never stored in this file; only references are listed.\n")
+	return WriteFileAtomic(path, append(header, out...), 0o600)
+}
+
+// WriteFileAtomic writes data to a temporary file in the same directory,
+// fsyncs it, then renames it into place with the requested mode.
+func WriteFileAtomic(path string, data []byte, mode os.FileMode) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("create directory %s: %w", dir, err)
+	}
+	f, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	defer os.Remove(tmp)
+	if err := f.Chmod(mode); err != nil {
+		f.Close()
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return err
+	}
+	if d, err := os.Open(dir); err == nil {
+		_ = d.Sync()
+		_ = d.Close()
+	}
+	return nil
+}
+
+// Duration helpers used by the runtime.
+func (h HealthConfig) Interval() time.Duration { return time.Duration(h.IntervalSeconds) * time.Second }
+func (h HealthConfig) Timeout() time.Duration  { return time.Duration(h.TimeoutSeconds) * time.Second }
+func (h HealthConfig) Cooldown() time.Duration { return time.Duration(h.CooldownSeconds) * time.Second }

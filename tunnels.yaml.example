@@ -1,0 +1,93 @@
+# tunnels.yaml.example — Outbound tunnel definitions for tunneld.
+#
+# Place the active copy at /etc/tunneld/tunnels.yaml (or the path set in
+# tunneld.yaml). This file is automatically updated by the web dashboard when
+# tunnels are added, edited, or deleted. Manual edits are also supported;
+# restart tunneld to reload.
+#
+# IMPORTANT: Passwords and pre-shared keys are NEVER stored here.
+# Only reference names (*_ref) are listed. The actual values must be placed
+# in /etc/tunneld/secrets.yaml with file permissions 0600.
+
+tunnels:
+  # 1. L2TP over IPsec (strongSwan IKEv2 transport mode, pre-shared key)
+  - name: de-fra-01
+    method: l2tp
+    server: de1.vpn.example.net
+    username: client-frankfurt
+    password_ref: de-fra-01-password
+    use_ipsec: true
+    ipsec_secret_ref: de-fra-01-psk
+    mtu: 1400
+    mru: 1400
+    enabled: true
+
+  # 2. L2TP without IPsec (plaintext L2TP tunnel, unencrypted transport)
+  - name: nl-ams-01
+    method: l2tp
+    server: nl1.vpn.example.net
+    username: client-amsterdam
+    password_ref: nl-ams-01-password
+    use_ipsec: false
+    mtu: 1400
+    mru: 1400
+    enabled: true
+
+  # 3. SSTP on standard HTTPS port 443 with TLS certificate verification
+  - name: ch-zrh-01
+    method: sstp
+    server: ch1.vpn.example.net
+    username: client-zurich
+    password_ref: ch-zrh-01-password
+    sstp_port: 443
+    sstp_ignore_cert: false
+    mtu: 1400
+    mru: 1400
+    enabled: true
+
+  # 4. SSTP on a custom port with self-signed certificate acceptance
+  - name: jp-tyo-01
+    method: sstp
+    server: jp1.vpn.example.net
+    username: client-tokyo
+    password_ref: jp-tyo-01-password
+    sstp_port: 8443
+    sstp_ignore_cert: true
+    mtu: 1400
+    mru: 1400
+    enabled: true
+
+  # 5. PPTP with 128-bit MPPE encryption enforced
+  - name: us-nyc-01
+    method: pptp
+    server: us1.vpn.example.net
+    username: client-newyork
+    password_ref: us-nyc-01-password
+    require_mppe: true
+    mtu: 1400
+    mru: 1400
+    enabled: true
+
+  # 6. PPTP with legacy phone parameter support
+  - name: uk-lon-01
+    method: pptp
+    server: uk1.vpn.example.net
+    username: client-london
+    password_ref: uk-lon-01-password
+    pptp_phone: 10.0.0.1
+    require_mppe: false
+    mtu: 1400
+    mru: 1400
+    enabled: true
+
+  # 7. L2TP over IPsec (high-priority Asia-Pacific exit)
+  - name: sg-sin-01
+    method: l2tp
+    server: sg1.vpn.example.net
+    username: client-singapore
+    password_ref: sg-sin-01-password
+    use_ipsec: true
+    ipsec_secret_ref: sg-sin-01-psk
+    mtu: 1400
+    mru: 1400
+    enabled: true

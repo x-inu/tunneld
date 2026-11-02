@@ -1,0 +1,52 @@
+[Unit]
+Description=tunneld — Multi-protocol L2TP/SSTP/PPTP Tunnel Control Plane & Dashboard
+Documentation=https://github.com/x-inu/tunneld
+After=network.target network-online.target
+Wants=network-online.target
+# If xl2tpd system service is running, it conflicts on the L2TP UDP port 1701.
+# tunneld manages its own dedicated xl2tpd daemon instance.
+Conflicts=xl2tpd.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/local/bin/tunneld -config /etc/tunneld/tunneld.yaml
+Restart=always
+RestartSec=5s
+
+# Process and resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+TasksMax=4096
+
+# Sandboxing and capabilities
+# Real mode requires CAP_NET_ADMIN, CAP_NET_RAW, and root privileges to manage
+# PPP devices, strongSwan swanctl, and iproute2 default route switching.
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_DAC_OVERRIDE CAP_SETUID CAP_SETGID
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+
+# File system protections
+ProtectSystem=strict
+ReadWritePaths=/etc/tunneld /var/lib/tunneld /run/tunneld /etc/swanctl/conf.d /etc/ppp
+RuntimeDirectory=tunneld
+RuntimeDirectoryMode=0700
+StateDirectory=tunneld
+StateDirectoryMode=0700
+ConfigurationDirectory=tunneld
+ConfigurationDirectoryMode=0700
+
+# Security restrictions
+ProtectControlGroups=true
+ProtectKernelModules=false
+MemoryDenyWriteExecute=false
+LockPersonality=true
+PrivateTmp=true
+
+# Graceful termination
+TimeoutStopSec=45s
+KillMode=mixed
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

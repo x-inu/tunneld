@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="robots" content="noindex, nofollow">
+  <title>tunneld · Egress control</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="demo-banner" id="demo-banner" hidden>
+    <span class="demo-label">Demo mode</span>
+    <span>All tunnel state and public IPs on this page are simulated. No routes are changed.</span>
+  </div>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/" aria-label="tunneld dashboard">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" width="20" height="20" fill="none">
+            <path d="M7 26V15a9 9 0 0 1 18 0v11" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+            <circle cx="16" cy="22" r="3.2" fill="currentColor"/>
+          </svg>
+        </span>
+        <span class="brand-name">tunneld</span>
+      </a>
+
+      <nav class="topnav" aria-label="Session controls">
+        <span class="live-state" id="live-state" data-state="connecting">
+          <span class="live-dot" aria-hidden="true"></span>
+          <span id="live-label">Connecting</span>
+        </span>
+        <span class="topbar-clock" id="topbar-clock">--:--:-- UTC</span>
+        <span class="topbar-user" id="session-user" hidden></span>
+        <button class="btn btn-quiet btn-small" id="logout-button" type="button">Log out</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="hero" aria-label="Active egress">
+      <div class="hero-main">
+        <div class="eyebrow-row">
+          <span class="eyebrow">Active egress</span>
+          <span class="verified-pill" id="verified-pill" data-state="offline">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="verified-label">Original uplink</span>
+          </span>
+        </div>
+
+        <h1 class="hero-ip" id="hero-ip">—</h1>
+        <p class="hero-summary" id="hero-summary">No tunnel is carrying traffic. The server is using its original uplink.</p>
+
+        <div class="hero-meta">
+          <div class="meta-item">
+            <span class="meta-label">Route</span>
+            <span class="meta-value" id="hero-tunnel">—</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Method</span>
+            <span class="meta-value" id="hero-method">—</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Confirmed</span>
+            <span class="meta-value" id="hero-verified">—</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Latency</span>
+            <span class="meta-value" id="hero-latency">—</span>
+          </div>
+        </div>
+
+        <div class="hero-actions">
+          <button class="btn btn-primary" id="copy-ip" type="button" disabled>
+            <svg class="icon" viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden="true">
+              <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
+              <path d="M10.5 5.5V4A1.5 1.5 0 0 0 9 2.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5" stroke="currentColor" stroke-width="1.4"/>
+            </svg>
+            <span id="copy-label">Copy public IP</span>
+          </button>
+          <span class="previous-ip" id="previous-ip" hidden></span>
+        </div>
+
+        <div class="hero-proof" id="hero-proof" data-state="idle">
+          <span class="proof-badge" id="proof-badge">Idle</span>
+          <span class="proof-text" id="proof-text">No tunnel route is active. The server exits through its original uplink.</span>
+        </div>
+      </div>
+
+      <aside class="rotation-panel" aria-labelledby="rotation-heading">
+        <div class="panel-head">
+          <div>
+            <span class="eyebrow">Rotation</span>
+            <h2 id="rotation-heading">Egress schedule</h2>
+          </div>
+          <span class="mode-readout" id="mode-readout">Manual</span>
+        </div>
+
+        <div class="segmented" id="rotation-modes" role="group" aria-label="Rotation mode">
+          <button type="button" data-mode="manual" aria-pressed="true">Manual</button>
+          <button type="button" data-mode="timer" aria-pressed="false">Timer</button>
+          <button type="button" data-mode="failover" aria-pressed="false">Failover</button>
+        </div>
+
+        <div class="countdown-block">
+          <span class="meta-label" id="countdown-label">Next rotation</span>
+          <div class="countdown" id="countdown">On demand</div>
+          <span class="countdown-note" id="countdown-note">Rotations happen only when requested.</span>
+        </div>
+
+        <div class="interval-row">
+          <label class="interval-field" for="interval-input">
+            <span class="meta-label">Interval</span>
+            <span class="interval-control">
+              <input class="input input-compact" id="interval-input" type="number" min="1" max="60" step="1" inputmode="numeric" value="10">
+              <span class="interval-unit">min</span>
+            </span>
+          </label>
+          <button class="btn btn-quiet btn-small" id="save-interval" type="button">Apply</button>
+        </div>
+
+        <button class="btn btn-accent rotate-button" id="rotate-button" type="button">
+          <svg class="icon" viewBox="0 0 16 16" width="15" height="15" fill="none" aria-hidden="true">
+            <path d="M13.5 8a5.5 5.5 0 1 1-1.7-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M13.5 2.5V6H10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span id="rotate-label">Rotate now</span>
+        </button>
+
+        <p class="panel-note" id="rotation-note">The current exit is restored automatically if the new route cannot be verified.</p>
+        <p class="last-reason" id="last-reason" hidden></p>
+      </aside>
+    </section>
+
+    <section class="stats" aria-label="Fleet summary">
+      <div class="stat">
+        <span class="stat-label">Definitions</span>
+        <strong class="stat-value" id="stat-total">0</strong>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Connected</span>
+        <strong class="stat-value" id="stat-connected">0</strong>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Healthy</span>
+        <strong class="stat-value stat-green" id="stat-healthy">0</strong>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Standby</span>
+        <strong class="stat-value" id="stat-standby">0</strong>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Service uptime</span>
+        <strong class="stat-value stat-mono" id="stat-uptime">—</strong>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="fleet-heading">
+      <div class="section-head">
+        <div>
+          <span class="eyebrow">Fleet</span>
+          <h2 id="fleet-heading">Tunnel inventory</h2>
+        </div>
+        <div class="section-tools">
+          <label class="search-field">
+            <span class="sr-only">Filter tunnels</span>
+            <svg class="icon" viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden="true">
+              <circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4"/>
+              <path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            </svg>
+            <input class="input input-search" id="tunnel-filter" type="search" placeholder="Filter tunnels" autocomplete="off">
+          </label>
+          <button class="btn btn-primary btn-small" id="add-tunnel" type="button">
+            <span aria-hidden="true">+</span> Add tunnel
+          </button>
+        </div>
+      </div>
+      <div class="tunnel-grid" id="tunnel-grid" aria-live="polite"></div>
+      <div class="empty-state" id="fleet-empty" hidden>
+        <p>No tunnels match this filter.</p>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="activity-heading">
+      <div class="section-head section-head-activity">
+        <div>
+          <span class="eyebrow">Ledger</span>
+          <h2 id="activity-heading">Activity</h2>
+        </div>
+        <div class="tabs" id="activity-tabs" role="tablist" aria-label="Activity views">
+          <button type="button" role="tab" data-tab="rotations" aria-selected="true">Rotations</button>
+          <button type="button" role="tab" data-tab="logs" aria-selected="false">Logs</button>
+          <button type="button" role="tab" data-tab="audit" aria-selected="false">Audit</button>
+        </div>
+      </div>
+
+      <div class="activity-panel">
+        <div class="activity-toolbar">
+          <span class="activity-summary" id="activity-summary">Loading activity…</span>
+          <div class="activity-tools">
+            <label class="activity-filter" id="log-filter-wrap" hidden>
+              <span class="sr-only">Filter logs by tunnel</span>
+              <select class="input input-compact" id="log-filter">
+                <option value="">All tunnels</option>
+              </select>
+            </label>
+            <button class="btn btn-quiet btn-small" id="refresh-activity" type="button">Refresh</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <div id="activity-body" class="activity-body">
+            <div class="skeleton-row"></div>
+            <div class="skeleton-row"></div>
+            <div class="skeleton-row"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span><span class="footer-mark">tunneld</span> <span id="footer-version">—</span></span>
+      <span>Local control plane · <span id="footer-demo" hidden>demo simulation · </span>all times UTC</span>
+    </footer>
+  </main>
+
+  <dialog class="modal" id="tunnel-dialog" aria-labelledby="tunnel-dialog-title">
+    <form id="tunnel-form" method="dialog" novalidate>
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow" id="tunnel-dialog-eyebrow">New definition</span>
+          <h2 id="tunnel-dialog-title">Add tunnel</h2>
+        </div>
+        <button class="icon-button" type="button" data-close-dialog aria-label="Close dialog">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true">
+            <path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <div class="form-error" id="tunnel-form-error" role="alert" hidden></div>
+
+        <div class="form-grid">
+          <label class="field">
+            <span class="field-label">Name</span>
+            <input class="input" id="field-name" name="name" type="text" maxlength="32" pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,31}" placeholder="mikrotik-frankfurt" required>
+            <span class="field-hint">Identifier only. Cannot be changed later.</span>
+          </label>
+
+          <label class="field">
+            <span class="field-label">Method</span>
+            <select class="input" id="field-method" name="method">
+              <option value="l2tp">L2TP</option>
+              <option value="sstp">SSTP</option>
+              <option value="pptp">PPTP</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span class="field-label">Server</span>
+            <input class="input" id="field-server" name="server" type="text" maxlength="253" placeholder="vpn.example.net" autocomplete="off" required>
+            <span class="field-hint">Hostname or IPv4 address. No scheme or path.</span>
+          </label>
+
+          <label class="field">
+            <span class="field-label">Username</span>
+            <input class="input" id="field-username" name="username" type="text" maxlength="128" placeholder="tunnel-user" autocomplete="username" required>
+          </label>
+
+          <label class="field field-wide">
+            <span class="field-label" id="password-label">Password</span>
+            <input class="input" id="field-password" name="password" type="password" autocomplete="new-password">
+            <span class="field-hint" id="password-hint">Stored server-side in a 0600 credential file. Never returned by the API.</span>
+          </label>
+        </div>
+
+        <fieldset class="form-group" id="ipsec-group">
+          <legend>IPsec</legend>
+          <label class="check-row">
+            <input type="checkbox" id="field-use-ipsec">
+            <span>
+              <strong>Wrap L2TP in IPsec</strong>
+              <small>Recommended. Generates a strongSwan transport-mode connection.</small>
+            </span>
+          </label>
+          <label class="field" id="psk-field">
+            <span class="field-label" id="psk-label">IPsec pre-shared key</span>
+            <input class="input" id="field-psk" name="psk" type="password" autocomplete="new-password">
+            <span class="field-hint" id="psk-hint">Kept separate from the tunnel password.</span>
+          </label>
+          <p class="inline-warning" id="l2tp-warning">L2TP without IPsec does not encrypt traffic.</p>
+        </fieldset>
+
+        <fieldset class="form-group" id="sstp-group" hidden>
+          <legend>SSTP</legend>
+          <div class="form-grid">
+            <label class="field">
+              <span class="field-label">Port</span>
+              <input class="input" id="field-sstp-port" type="number" min="1" max="65535" step="1" value="443">
+            </label>
+            <label class="field field-inline">
+              <span class="field-label">Certificate validation</span>
+              <span class="check-row check-row-compact">
+                <input type="checkbox" id="field-ignore-cert">
+                <span><strong>Ignore certificate errors</strong><small>Only for trusted test servers.</small></span>
+              </span>
+            </label>
+            <label class="field field-wide">
+              <span class="field-label">CA certificate path</span>
+              <input class="input" id="field-ca-cert" type="text" placeholder="/etc/ssl/certs/private-ca.pem">
+              <span class="field-hint">Optional absolute path to a private CA bundle.</span>
+            </label>
+          </div>
+          <p class="inline-warning" id="sstp-warning">Disabling certificate validation exposes the session to interception.</p>
+        </fieldset>
+
+        <fieldset class="form-group" id="pptp-group" hidden>
+          <legend>PPTP</legend>
+          <div class="form-grid">
+            <label class="field">
+              <span class="field-label">Phone number</span>
+              <input class="input" id="field-phone" type="text" maxlength="64" placeholder="Optional">
+            </label>
+            <label class="field field-inline">
+              <span class="field-label">Encryption</span>
+              <span class="check-row check-row-compact">
+                <input type="checkbox" id="field-require-mppe">
+                <span><strong>Require MPPE-128</strong><small>Refuses weaker negotiation.</small></span>
+              </span>
+            </label>
+          </div>
+          <p class="inline-warning">PPTP is deprecated and its encryption is weak. Use it only for legacy compatibility.</p>
+        </fieldset>
+
+        <fieldset class="form-group">
+          <legend>Link tuning</legend>
+          <div class="form-grid form-grid-4">
+            <label class="field">
+              <span class="field-label">MTU</span>
+              <input class="input" id="field-mtu" type="number" min="576" max="1500" step="1" value="1400">
+            </label>
+            <label class="field">
+              <span class="field-label">MRU</span>
+              <input class="input" id="field-mru" type="number" min="576" max="1500" step="1" value="1400">
+            </label>
+            <label class="field field-inline field-span-2">
+              <span class="field-label">Availability</span>
+              <span class="check-row check-row-compact">
+                <input type="checkbox" id="field-enabled" checked>
+                <span><strong>Enabled</strong><small>Include this tunnel in health checks and rotation.</small></span>
+              </span>
+            </label>
+          </div>
+        </fieldset>
+      </div>
+
+      <div class="modal-foot">
+        <span class="modal-note" id="modal-note">Credentials are written to disk with mode 0600.</span>
+        <div class="modal-buttons">
+          <button class="btn btn-quiet" type="button" data-close-dialog>Cancel</button>
+          <button class="btn btn-primary" type="submit" id="tunnel-save">Save tunnel</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="modal modal-small" id="confirm-dialog" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <div class="modal-head">
+        <div>
+          <span class="eyebrow">Confirm</span>
+          <h2 id="confirm-title">Are you sure?</h2>
+        </div>
+      </div>
+      <div class="modal-body">
+        <p class="confirm-message" id="confirm-message"></p>
+      </div>
+      <div class="modal-foot">
+        <div class="modal-buttons">
+          <button class="btn btn-quiet" type="submit" value="cancel">Cancel</button>
+          <button class="btn btn-danger" type="submit" value="confirm" id="confirm-button">Confirm</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="false"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

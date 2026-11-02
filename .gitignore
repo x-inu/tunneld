@@ -1,0 +1,26 @@
+# tunneld gitignore
+
+# Binaries
+/tunneld
+*.exe
+*.test
+
+# SQLite databases and journal files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Active secrets (only examples should be committed)
+secrets.yaml
+!secrets.yaml.example
+
+# Runtime / log files
+*.log
+/run/
+/tmp/
+
+# Go build and test artifacts
+coverage.out
+dist/
